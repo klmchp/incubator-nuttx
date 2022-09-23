@@ -140,7 +140,7 @@ int nxsem_post(FAR sem_t *sem)
            */
 
           for (stcb = (FAR struct tcb_s *)g_waitingforsemaphore.head;
-               (stcb && stcb->waitsem != sem);
+               (stcb && stcb->waitobj != sem);
                stcb = stcb->flink);
 
           if (stcb != NULL)
@@ -154,10 +154,6 @@ int nxsem_post(FAR sem_t *sem)
               /* Stop the watchdog timer */
 
               wd_cancel(&stcb->waitdog);
-
-              /* It is, let the task take the semaphore */
-
-              stcb->waitsem = NULL;
 
               /* Restart the waiting task. */
 
