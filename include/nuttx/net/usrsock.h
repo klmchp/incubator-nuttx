@@ -30,6 +30,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <sys/uio.h>
+#include <sys/param.h>
 
 #include <nuttx/net/netconfig.h>
 #include <nuttx/compiler.h>
@@ -37,10 +38,6 @@
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
-
-#ifndef ARRAY_SIZE
-#  define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
-#endif
 
 /* Event message flags */
 
@@ -85,6 +82,7 @@ enum usrsock_request_types_e
   USRSOCK_REQUEST_LISTEN,
   USRSOCK_REQUEST_ACCEPT,
   USRSOCK_REQUEST_IOCTL,
+  USRSOCK_REQUEST_SHUTDOWN,
   USRSOCK_REQUEST__MAX
 };
 
@@ -219,6 +217,14 @@ begin_packed_struct struct usrsock_request_ioctl_s
   uint16_t arglen;
 } end_packed_struct;
 
+begin_packed_struct struct usrsock_request_shutdown_s
+{
+  struct usrsock_request_common_s head;
+
+  int16_t usockid;
+  int16_t how;
+} end_packed_struct;
+
 /* Response/event message structures (kernel <= /dev/usrsock <= daemon) */
 
 begin_packed_struct struct usrsock_message_common_s
@@ -266,7 +272,7 @@ begin_packed_struct struct usrsock_message_socket_event_s
 
 ssize_t usrsock_iovec_get(FAR void *dst, size_t dstlen,
                           FAR const struct iovec *iov, int iovcnt,
-                          size_t pos);
+                          size_t pos, FAR bool *done);
 
 /****************************************************************************
  * Name: usrsock_iovec_put() - copy to iovec from buffer.

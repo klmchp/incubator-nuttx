@@ -61,11 +61,11 @@
 #define CONSOLE_PRIV               g_uart0priv
 #define CONSOLE_DEV                g_uart0_dev
 
-#define UART0_PIN_TX_MUX           GPIO_AF_MUX1
-#define UART0_PIN_RX_MUX           GPIO_AF_MUX1
+#define UART0_PIN_TX_MUX           BOARD_UART0_TX_MUX
+#define UART0_PIN_RX_MUX           BOARD_UART0_RX_MUX
 
-#define UART0_PIN_TX               GPIO_PIN_PB1
-#define UART0_PIN_RX               GPIO_PIN_PB0
+#define UART0_PIN_TX               BOARD_UART0_TX_PIN
+#define UART0_PIN_RX               BOARD_UART0_RX_PIN
 
 #define UART0_TX_BUF_SIZE          CONFIG_TLSR82_UART0_TX_BUF_SIZE
 #define UART0_RX_BUF_SIZE          CONFIG_TLSR82_UART0_RX_BUF_SIZE
@@ -1069,10 +1069,10 @@ static void tlsr82_uart_shutdown(struct uart_dev_s *dev)
  * Name: tlsr82_uart_interrupt
  *
  * Description:
- *   This is the UART status interrupt handler.  It will be invoked when an
- *   interrupt received on the 'irq'  It should call uart_transmitchars or
- *   uart_receivechar to perform the appropriate data transfers.  The
- *   interrupt handling logic must be able to map the 'irq' number into the
+ *   This is the UART interrupt handler.  It will be invoked when an
+ *   interrupt is received on the 'irq'.  It should call uart_xmitchars or
+ *   uart_recvchars to perform the appropriate data transfers.  The
+ *   interrupt handling logic must be able to map the 'arg' to the
  *   appropriate uart_dev_s structure in order to call these functions.
  *
  ****************************************************************************/
@@ -1083,7 +1083,7 @@ static int UART_RAMCODE tlsr82_interrupt(int irq, void *context, void *arg)
   UNUSED(context);
 
   struct uart_dev_s *dev = (struct uart_dev_s *)arg;
-  uart_priv_t *     priv = (uart_priv_t *)dev->priv;
+  uart_priv_t       *priv = (uart_priv_t *)dev->priv;
 
   if ((UART_BUF_CNT1_REG & UART_BUF_CNT1_RX_ERR))
     {
@@ -1163,7 +1163,7 @@ static int UART_RAMCODE tlsr82_dma_interrupt(int irq, void *context,
                                              void *arg)
 {
   struct uart_dev_s *dev = (struct uart_dev_s *)arg;
-  uart_priv_t *     priv = (uart_priv_t *)dev->priv;
+  uart_priv_t       *priv = (uart_priv_t *)dev->priv;
 
   /* Check the uart dma rx interrupt status */
 
@@ -1503,7 +1503,7 @@ static void tlsr82_uart_dma_txint(struct uart_dev_s *dev, bool enable)
    * Instead, we use DMA interrupts that are activated once during boot
    * sequence. Furthermore we can use up_dma_txcallback() to handle staff at
    * half DMA transfer or after transfer completion (depending configuration,
-   * see stm32_dmastart(...) ).
+   * see stm32_dmastart(...)).
    */
 }
 #endif
@@ -1548,7 +1548,6 @@ static void tlsr82_uart_dma_txavail(struct uart_dev_s *dev)
   /* Wait for the previous dma transfer finish */
 
   nxsem_wait(priv->txdmasem);
-
   uart_xmitchars_dma(dev);
 }
 #endif

@@ -74,7 +74,7 @@ begin_packed_struct struct uart_rpmsg_wakeup_s
 struct uart_rpmsg_priv_s
 {
   struct rpmsg_endpoint ept;
-  mutex_t               mutex;
+  mutex_t               lock;
   FAR const char        *devname;
   FAR const char        *cpuname;
   FAR void              *recv_data;
@@ -260,14 +260,14 @@ static void uart_rpmsg_dmatxavail(FAR struct uart_dev_s *dev)
 {
   FAR struct uart_rpmsg_priv_s *priv = dev->priv;
 
-  nxmutex_lock(&priv->mutex);
+  nxmutex_lock(&priv->lock);
 
   if (is_rpmsg_ept_ready(&priv->ept) && dev->dmatx.length == 0)
     {
       uart_xmitchars_dma(dev);
     }
 
-  nxmutex_unlock(&priv->mutex);
+  nxmutex_unlock(&priv->lock);
 }
 
 static void uart_rpmsg_send(FAR struct uart_dev_s *dev, int ch)
@@ -354,7 +354,7 @@ static int uart_rpmsg_ept_cb(FAR struct rpmsg_endpoint *ept, FAR void *data,
     {
       /* Get write-cmd response, this tell how many data have sent */
 
-      nxmutex_lock(&priv->mutex);
+      nxmutex_lock(&priv->lock);
 
       dev->dmatx.nbytes = header->result;
       if (header->result < 0)
@@ -364,7 +364,7 @@ static int uart_rpmsg_ept_cb(FAR struct rpmsg_endpoint *ept, FAR void *data,
 
       uart_xmitchars_done(dev);
 
-      nxmutex_unlock(&priv->mutex);
+      nxmutex_unlock(&priv->lock);
 
       /* If have sent some data succeed, then continue send */
 
@@ -412,8 +412,14 @@ int uart_rpmsg_init(FAR const char *cpuname, FAR const char *devname,
       return ret;
     }
 
+  /* Ignore the `isconsole` to passthrough all UART data,
+   * since the most common usage of rpmsg uart is to communicate with cu
+   * in other processor core, should not do CRLF convertion and ECHO.
+   * Note: you can also change this behavior by termios.
+   */
+
   dev->ops       = &g_uart_rpmsg_ops;
-  dev->isconsole = isconsole;
+  dev->isconsole = false;
   dev->recv.size = buf_size;
   dev->xmit.size = buf_size;
 
@@ -450,11 +456,11 @@ int uart_rpmsg_init(FAR const char *cpuname, FAR const char *devname,
       goto fail;
     }
 
-  nxmutex_init(&priv->mutex);
+  nxmutex_init(&priv->lock);
   sprintf(dev_name, "%s%s", UART_RPMSG_DEV_PREFIX, devname);
   uart_register(dev_name, dev);
 
-  if (dev->isconsole)
+  if (isconsole)
     {
       uart_register(UART_RPMSG_DEV_CONSOLE, dev);
     }

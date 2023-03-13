@@ -79,6 +79,10 @@ static uint16_t socket_event(FAR struct net_driver_s *dev,
 
           conn->state   = USRSOCK_CONN_STATE_READY;
           conn->usockid = pstate->result;
+          if (flags & USRSOCK_EVENT_SENDTO_READY)
+            {
+              conn->flags |= USRSOCK_EVENT_SENDTO_READY;
+            }
         }
 
       /* Stop further callbacks */
@@ -133,7 +137,7 @@ static int do_socket_request(FAR struct usrsock_conn_s *conn, int domain,
   bufs[0].iov_base = (FAR void *)&req;
   bufs[0].iov_len = sizeof(req);
 
-  return usrsock_do_request(conn, bufs, ARRAY_SIZE(bufs));
+  return usrsock_do_request(conn, bufs, nitems(bufs));
 }
 
 /****************************************************************************
@@ -221,7 +225,7 @@ int usrsock_socket(int domain, int type, int protocol,
 
   /* Wait for completion of request. */
 
-  net_lockedwait_uninterruptible(&state.recvsem);
+  net_sem_wait_uninterruptible(&state.recvsem);
 
   if (state.result < 0)
     {
@@ -229,9 +233,6 @@ int usrsock_socket(int domain, int type, int protocol,
       goto errout_teardown_callback;
     }
 
-  psock->s_type = SOCK_USRSOCK_TYPE;
-  psock->s_domain = PF_USRSOCK_DOMAIN;
-  conn->type    = type;
   psock->s_conn = conn;
   conn->crefs   = 1;
 

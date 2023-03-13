@@ -25,13 +25,13 @@
 #include <nuttx/config.h>
 
 #include <stdint.h>
-#include <queue.h>
 #include <assert.h>
 #include <errno.h>
 
 #include <nuttx/irq.h>
 #include <nuttx/arch.h>
 #include <nuttx/clock.h>
+#include <nuttx/queue.h>
 #include <nuttx/wqueue.h>
 
 #include "wqueue/wqueue.h"
@@ -118,7 +118,10 @@ int work_queue(int qid, FAR struct work_s *work, worker_t worker,
 
   /* Remove the entry from the timer and work queue. */
 
-  work_cancel(qid, work);
+  if (work->worker != NULL)
+    {
+      work_cancel(qid, work);
+    }
 
   /* Initialize the work structure. */
 

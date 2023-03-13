@@ -50,8 +50,8 @@ Installation
 
 3. Configure and build NuttX
 
-  $ git clone https://github.com/apache/incubator-nuttx.git nuttx
-  $ git clone https://github.com/apache/incubator-nuttx-apps.git apps
+  $ git clone https://github.com/apache/nuttx.git nuttx
+  $ git clone https://github.com/apache/nuttx-apps.git apps
   $ cd nuttx
   $ make distclean
   $ ./tools/configure.sh pimoroni-tiny2040:nsh
@@ -81,7 +81,7 @@ Defconfigs
 
 - nshsram
     Load NuttX binary to SRAM
-  
+
 - smp
     Enable SMP mode. Both Core 0 and Core 1 are used by NuttX.
 

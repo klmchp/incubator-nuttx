@@ -48,7 +48,7 @@
  * Public Data
  ****************************************************************************/
 
-#ifdef CONFIG_ARCH_CHIP_QEMU_A53
+#ifdef CONFIG_ARCH_CHIP_QEMU
 #define CONFIG_QEMU_UART_BASE      0x9000000
 #define CONFIG_QEMU_UART_IRQ       (GIC_SPI_INT_BASE + 1)
 #endif
@@ -56,20 +56,6 @@
 /****************************************************************************
  * Public Function Prototypes
  ****************************************************************************/
-
-/****************************************************************************
- * Name: qemu_earlyserialinit
- *
- * Description:
- *   Performs the low level UART initialization early in debug so that the
- *   serial console will be available during bootup.  This must be called
- *   before arm_serialinit.
- *
- ****************************************************************************/
-
-#ifdef USE_EARLYSERIALINIT
-void qemu_earlyserialinit(void);
-#endif
 
 #endif /* __ASSEMBLY__ */
 #endif /* __ARCH_ARM64_SRC_QEMU_QEMU_SERIAL_H */

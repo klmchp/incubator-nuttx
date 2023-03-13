@@ -37,8 +37,11 @@
 
 #include "nrf53_clockconfig.h"
 #include "hardware/nrf53_utils.h"
+#include "hardware/nrf53_uicr.h"
+#include "hardware/nrf53_ctrlap.h"
 #include "nrf53_lowputc.h"
 #include "nrf53_start.h"
+#include "nrf53_cpunet.h"
 #include "nrf53_gpio.h"
 #include "nrf53_serial.h"
 
@@ -71,6 +74,33 @@ void __start(void) noinstrument_function;
 #endif
 
 /****************************************************************************
+ * Name: nrf53_approtect
+ ****************************************************************************/
+
+void nrf53_approtect(void)
+{
+#ifdef CONFIG_NRF53_ENABLE_APPROTECT
+  /* Lock APPROTECT.DISABLE */
+
+  putreg32(CTRLAP_APPROTECTLOCK_LOCKED, NRF53_CTRLAP_APPROTECTLOCK);
+#else
+  uint32_t regval = 0;
+
+  /* Load APPROTECT from UICR */
+
+  regval = getreg32(NRF53_UICR_APPROTECT);
+  putreg32(regval, NRF53_CTRLAP_APPROTECTDISABLE);
+
+#  ifdef CONFIG_NRF53_APPCORE
+  /* Load SECUREAPPROTECT from UICR only for the App core */
+
+  regval = getreg32(NRF53_UICR_SECUREAPPROTECT);
+  putreg32(regval, NRF53_CTRLAP_SECUREREADPROTECTDISABLE);
+#  endif
+#endif
+}
+
+/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
@@ -98,6 +128,16 @@ void __start(void)
 
   __asm__ __volatile__ ("\tcpsid  i\n");
 
+  /* Handle APPROTECT configuration */
+
+  nrf53_approtect();
+
+#ifdef CONFIG_NRF53_NET_BOOT
+  /* Boot CPU NET before console init */
+
+  nrf53_cpunet_boot();
+#endif
+
   /* Configure the clocking and the console uart so that we can get debug
    * output as soon as possible.  NOTE: That this logic must not assume that
    * .bss or .data have beeninitialized.
@@ -111,7 +151,7 @@ void __start(void)
    * certain that there are no issues with the state of global variables.
    */
 
-  for (dest = &_sbss; dest < &_ebss; )
+  for (dest = (uint32_t *)_sbss; dest < (uint32_t *)_ebss; )
     {
       *dest++ = 0;
     }
@@ -124,22 +164,20 @@ void __start(void)
    * end of all of the other read-only data (.text, .rodata) at _eronly.
    */
 
-  for (src = &_eronly, dest = &_sdata; dest < &_edata; )
+  for (src = (const uint32_t *)_eronly,
+       dest = (uint32_t *)_sdata; dest < (uint32_t *)_edata;
+      )
     {
       *dest++ = *src++;
     }
 
   showprogress('C');
 
-#if defined(CONFIG_ARCH_CHIP_NRF53832)
-  /* Initialize the errdata work-around */
-
-  nrf53832_errdata_init();
-#endif
-
-  /* Initialize the FPU (if configured) */
+#ifdef CONFIG_ARCH_HAVE_FPU
+  /* Initialize the FPU (if available) */
 
   arm_fpuconfig();
+#endif
 
   showprogress('D');
 

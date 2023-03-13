@@ -99,7 +99,7 @@ static int file_vopen(FAR struct file *filep, FAR const char *path,
 
   /* Get an inode for this file */
 
-  SETUP_SEARCH(&desc, path, false);
+  SETUP_SEARCH(&desc, path, (oflags & O_NOFOLLOW) != 0);
 
   ret = inode_find(&desc);
   if (ret < 0)
@@ -116,6 +116,11 @@ static int file_vopen(FAR struct file *filep, FAR const char *path,
 
   inode = desc.node;
   DEBUGASSERT(inode != NULL);
+
+  if (desc.nofollow && INODE_IS_SOFTLINK(inode))
+    {
+      return -ELOOP;
+    }
 
 #if defined(CONFIG_BCH) && \
     !defined(CONFIG_DISABLE_MOUNTPOINT) && \
@@ -186,6 +191,11 @@ static int file_vopen(FAR struct file *filep, FAR const char *path,
       ret = -ENXIO;
     }
 
+  if (ret == -EISDIR)
+    {
+      ret = dir_allocate(filep, desc.relpath);
+    }
+
   if (ret < 0)
     {
       goto errout_with_inode;
@@ -240,8 +250,8 @@ static int nx_vopen(FAR const char *path, int oflags, va_list ap)
 
   /* Allocate a new file descriptor for the inode */
 
-  fd = files_allocate(filep.f_inode, filep.f_oflags,
-                      filep.f_pos, filep.f_priv, 0);
+  fd = file_allocate(filep.f_inode, filep.f_oflags,
+                     filep.f_pos, filep.f_priv, 0, false);
   if (fd < 0)
     {
       file_close(&filep);

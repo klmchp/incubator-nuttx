@@ -29,14 +29,6 @@
 #include "cp15_cacheops.h"
 
 /****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-#define CP15_CACHE_INVALIDATE       0
-#define CP15_CACHE_CLEAN            1
-#define CP15_CACHE_CLEANINVALIDATE  2
-
-/****************************************************************************
  * Private Functions
  ****************************************************************************/
 
@@ -69,7 +61,87 @@ static inline uint32_t cp15_cache_get_info(uint32_t *sets, uint32_t *ways)
   return (1 << ((ccsidr & 0x7) + 2)) * 4;
 }
 
-static void cp15_dcache_op_level(uint32_t level, int op)
+static void cp15_dcache_op(int op)
+{
+  uint32_t clidr = CP15_GET(CLIDR);
+  int level;
+
+  for (level = 0; level < 7; level++)
+    {
+      uint32_t ctype = clidr & 0x7;
+
+      switch (ctype)
+        {
+          case 0x2:
+          case 0x3:
+          case 0x4:
+            cp15_dcache_op_level(level, op);
+            break;
+          default:
+            break;
+        }
+
+      clidr >>= 3;
+      if (clidr == 0)
+        {
+          break;
+        }
+    }
+}
+
+static void cp15_dcache_op_mva(uintptr_t start, uintptr_t end, int op)
+{
+  uint32_t line;
+
+  line = cp15_cache_get_info(NULL, NULL);
+
+  ARM_DSB();
+
+  if ((start & (line - 1)) != 0)
+    {
+      start &= ~(line - 1);
+      if (op == CP15_CACHE_INVALIDATE)
+        {
+          cp15_cleaninvalidate_dcacheline_bymva(start);
+          start += line;
+        }
+    }
+
+  while (start < end)
+    {
+      switch (op)
+        {
+          case CP15_CACHE_INVALIDATE:
+            if (start + line <= end)
+              {
+                cp15_invalidate_dcacheline_bymva(start);
+              }
+            else
+              {
+                cp15_cleaninvalidate_dcacheline_bymva(start);
+              }
+            break;
+          case CP15_CACHE_CLEAN:
+            cp15_clean_dcache_bymva(start);
+            break;
+          case CP15_CACHE_CLEANINVALIDATE:
+            cp15_cleaninvalidate_dcacheline_bymva(start);
+            break;
+          default:
+            break;
+        }
+
+      start += line;
+    }
+
+  ARM_ISB();
+}
+
+/****************************************************************************
+ * Public Functions
+ ****************************************************************************/
+
+void cp15_dcache_op_level(uint32_t level, int op)
 {
   uint32_t sets;
   uint32_t ways;
@@ -133,35 +205,7 @@ static void cp15_dcache_op_level(uint32_t level, int op)
   ARM_ISB();
 }
 
-static void cp15_dcache_op(int op)
-{
-  uint32_t clidr = CP15_GET(CLIDR);
-  int level;
-
-  for (level = 0; level < 7; level++)
-    {
-      uint32_t ctype = clidr & 0x7;
-
-      switch (ctype)
-        {
-          case 0x2:
-          case 0x3:
-          case 0x4:
-            cp15_dcache_op_level(level, op);
-            break;
-          default:
-            break;
-        }
-
-      clidr >>= 3;
-      if (clidr == 0)
-        {
-          break;
-        }
-    }
-}
-
-static void cp15_dcache_op_mva(uintptr_t start, uintptr_t end, int op)
+void cp15_invalidate_icache(uintptr_t start, uintptr_t end)
 {
   uint32_t line;
 
@@ -172,35 +216,17 @@ static void cp15_dcache_op_mva(uintptr_t start, uintptr_t end, int op)
 
   while (start < end)
     {
-      switch (op)
-        {
-          case CP15_CACHE_INVALIDATE:
-            cp15_invalidate_dcacheline_bymva(start);
-            break;
-          case CP15_CACHE_CLEAN:
-            cp15_clean_dcache_bymva(start);
-            break;
-          case CP15_CACHE_CLEANINVALIDATE:
-            cp15_cleaninvalidate_dcacheline_bymva(start);
-            break;
-          default:
-            break;
-        }
-
+      cp15_invalidate_icache_bymva(start);
       start += line;
     }
 
   ARM_ISB();
 }
 
-/****************************************************************************
- * Public Functions
- ****************************************************************************/
-
 void cp15_coherent_dcache(uintptr_t start, uintptr_t end)
 {
   cp15_dcache_op_mva(start, end, CP15_CACHE_CLEANINVALIDATE);
-  cp15_invalidate_icache();
+  cp15_invalidate_icache_all();
 }
 
 void cp15_invalidate_dcache(uintptr_t start, uintptr_t end)

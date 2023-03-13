@@ -32,12 +32,10 @@ endif # INPUT_MOUSE
 
 config INPUT_TOUCHSCREEN
 	bool
-	select MM_CIRCBUF
 	default n
 
 config INPUT_KEYBOARD
 	bool
-	select MM_CIRCBUF
 	default n
 
 config INPUT_UINPUT
@@ -500,6 +498,29 @@ config INPUT_CYPRESS_MBR3108_NPOLLWAITERS
 		Maximum number of threads that can be waiting on poll()
 
 endif # INPUT_CYPRESS_MBR3108
+
+config INPUT_GT9XX
+	bool "Goodix GT9xx Driver"
+	default n
+	select INPUT_TOUCHSCREEN
+	---help---
+		Enable support for Goodix GT9xx touch panel.
+
+if INPUT_GT9XX
+
+config INPUT_GT9XX_NPOLLWAITERS
+	int "Number of waiters to poll"
+	default 1
+	---help---
+		Maximum number of threads that can be waiting on poll()
+
+config INPUT_GT9XX_I2C_FREQUENCY
+	int "I2C frequency (Hz)"
+	default 400000
+	---help---
+		I2C frequency in Hz
+
+endif # INPUT_GT9XX
 
 config INPUT_BUTTONS
 	bool "Button Inputs"

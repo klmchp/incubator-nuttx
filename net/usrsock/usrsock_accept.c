@@ -161,7 +161,7 @@ static int do_accept_request(FAR struct usrsock_conn_s *conn,
   bufs[0].iov_base = &req;
   bufs[0].iov_len = sizeof(req);
 
-  return usrsock_do_request(conn, bufs, ARRAY_SIZE(bufs));
+  return usrsock_do_request(conn, bufs, nitems(bufs));
 }
 
 /****************************************************************************
@@ -213,7 +213,8 @@ static int do_accept_request(FAR struct usrsock_conn_s *conn,
  ****************************************************************************/
 
 int usrsock_accept(FAR struct socket *psock, FAR struct sockaddr *addr,
-                   FAR socklen_t *addrlen, FAR struct socket *newsock)
+                   FAR socklen_t *addrlen, FAR struct socket *newsock,
+                   int flags)
 {
   FAR struct usrsock_conn_s *conn = psock->s_conn;
   struct usrsock_data_reqstate_s state =
@@ -326,7 +327,7 @@ int usrsock_accept(FAR struct socket *psock, FAR struct sockaddr *addr,
 
           /* Wait for receive-avail (or abort, or timeout, or signal). */
 
-          ret = net_timedwait(&state.reqstate.recvsem,
+          ret = net_sem_timedwait(&state.reqstate.recvsem,
                               _SO_TIMEOUT(conn->sconn.s_rcvtimeo));
           usrsock_teardown_data_request_callback(&state);
           if (ret < 0)
@@ -343,7 +344,7 @@ int usrsock_accept(FAR struct socket *psock, FAR struct sockaddr *addr,
                 }
               else
                 {
-                  nerr("net_timedwait errno: %d\n", ret);
+                  nerr("net_sem_timedwait errno: %d\n", ret);
                   DEBUGPANIC();
                 }
 
@@ -385,7 +386,7 @@ int usrsock_accept(FAR struct socket *psock, FAR struct sockaddr *addr,
       inbufs[1].iov_base = &newconn->usockid;
       inbufs[1].iov_len = sizeof(newconn->usockid);
 
-      usrsock_setup_datain(conn, inbufs, ARRAY_SIZE(inbufs));
+      usrsock_setup_datain(conn, inbufs, nitems(inbufs));
 
       /* We might start getting events for this socket right after
        * returning to daemon, so setup 'newconn' already here.
@@ -400,7 +401,7 @@ int usrsock_accept(FAR struct socket *psock, FAR struct sockaddr *addr,
         {
           /* Wait for completion of request. */
 
-          net_lockedwait_uninterruptible(&state.reqstate.recvsem);
+          net_sem_wait_uninterruptible(&state.reqstate.recvsem);
           ret = state.reqstate.result;
 
           DEBUGASSERT(state.valuelen <= inaddrlen);
@@ -409,7 +410,6 @@ int usrsock_accept(FAR struct socket *psock, FAR struct sockaddr *addr,
           if (ret >= 0)
             {
               newconn->connected = true;
-              newconn->type      = conn->type;
               newconn->crefs     = 1;
 
               newsock->s_type    = psock->s_type;

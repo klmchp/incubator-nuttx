@@ -2,7 +2,7 @@ README
 ======
 
 This directory contains the port of NuttX to the Adafruit QT Py RP2040.
-See https://learn.adafruit.com/adafruit-qt-py-2040 for information 
+See https://learn.adafruit.com/adafruit-qt-py-2040 for information
 about Adafruit QT Py RP2040.
 
 NuttX supports the following RP2040 capabilities:
@@ -47,8 +47,8 @@ Installation
 
 3. Configure and build NuttX
 
-  $ git clone https://github.com/apache/incubator-nuttx.git nuttx
-  $ git clone https://github.com/apache/incubator-nuttx-apps.git apps
+  $ git clone https://github.com/apache/nuttx.git nuttx
+  $ git clone https://github.com/apache/nuttx-apps.git apps
   $ cd nuttx
   $ make distclean
   $ ./tools/configure.sh raspberrypi-pico:nsh
@@ -77,7 +77,7 @@ Defconfigs
 
 - nshsram
     Load NuttX binary to SRAM
-  
+
 - smp
     Enable SMP mode. Both Core 0 and Core 1 are used by NuttX.
 

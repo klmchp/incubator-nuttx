@@ -36,8 +36,9 @@
 #include <nuttx/fs/fs.h>
 #include <nuttx/irq.h>
 #include <nuttx/kmalloc.h>
+#include <nuttx/panic_notifier.h>
 #include <nuttx/power/pm.h>
-#include <nuttx/semaphore.h>
+#include <nuttx/mutex.h>
 #include <nuttx/wdog.h>
 #include <nuttx/wqueue.h>
 #include <nuttx/timers/oneshot.h>
@@ -55,7 +56,7 @@
       !defined(CONFIG_WATCHDOG_AUTOMONITOR_BY_IDLE)
 #    if CONFIG_WATCHDOG_AUTOMONITOR_PING_INTERVAL == 0
 #      define WATCHDOG_AUTOMONITOR_PING_INTERVAL \
-         (CONFIG_WATCHDOG_AUTOMONITOR_PING_INTERVAL / 2)
+         (CONFIG_WATCHDOG_AUTOMONITOR_TIMEOUT / 2)
 #    else
 #      define WATCHDOG_AUTOMONITOR_PING_INTERVAL \
          CONFIG_WATCHDOG_AUTOMONITOR_PING_INTERVAL
@@ -75,6 +76,9 @@
 
 struct watchdog_upperhalf_s
 {
+  /* When a crash occurs, stop the watchdog */
+
+  struct notifier_block nb;
 #ifdef CONFIG_WATCHDOG_AUTOMONITOR
 #  if defined(CONFIG_WATCHDOG_AUTOMONITOR_BY_ONESHOT)
   FAR struct oneshot_lowerhalf_s *oneshot;
@@ -91,7 +95,7 @@ struct watchdog_upperhalf_s
 #endif
 
   uint8_t   crefs;    /* The number of times the device has been opened */
-  sem_t     exclsem;  /* Supports mutual exclusion */
+  mutex_t   lock;     /* Supports mutual exclusion */
   FAR char *path;     /* Registration path */
 
   /* The contained lower-half driver */
@@ -124,10 +128,6 @@ static const struct file_operations g_wdogops =
   wdog_write, /* write */
   NULL,       /* seek */
   wdog_ioctl, /* ioctl */
-  NULL        /* poll */
-#ifndef CONFIG_DISABLE_PSEUDOFS_OPERATIONS
-  , NULL      /* unlink */
-#endif
 };
 
 /****************************************************************************
@@ -300,6 +300,24 @@ static void watchdog_automonitor_stop(FAR struct watchdog_upperhalf_s *upper)
 }
 #endif
 
+static int wdog_notifier(FAR struct notifier_block *nb, unsigned long action,
+                         FAR void *data)
+{
+  FAR struct watchdog_upperhalf_s *upper =
+                                       (FAR struct watchdog_upperhalf_s *)nb;
+
+  if (action == PANIC_KERNEL)
+    {
+#ifdef CONFIG_WATCHDOG_AUTOMONITOR
+      watchdog_automonitor_stop(upper);
+#else
+      return upper->lower->ops->stop(upper->lower);
+#endif
+    }
+
+  return 0;
+}
+
 /****************************************************************************
  * Name: wdog_open
  *
@@ -319,7 +337,7 @@ static int wdog_open(FAR struct file *filep)
 
   /* Get exclusive access to the device structures */
 
-  ret = nxsem_wait(&upper->exclsem);
+  ret = nxmutex_lock(&upper->lock);
   if (ret < 0)
     {
       goto errout;
@@ -336,7 +354,7 @@ static int wdog_open(FAR struct file *filep)
       /* More than 255 opens; uint8_t overflows to zero */
 
       ret = -EMFILE;
-      goto errout_with_sem;
+      goto errout_with_lock;
     }
 
   /* Save the new open count */
@@ -344,8 +362,8 @@ static int wdog_open(FAR struct file *filep)
   upper->crefs = tmp;
   ret = OK;
 
-errout_with_sem:
-  nxsem_post(&upper->exclsem);
+errout_with_lock:
+  nxmutex_unlock(&upper->lock);
 
 errout:
   return ret;
@@ -369,7 +387,7 @@ static int wdog_close(FAR struct file *filep)
 
   /* Get exclusive access to the device structures */
 
-  ret = nxsem_wait(&upper->exclsem);
+  ret = nxmutex_lock(&upper->lock);
   if (ret < 0)
     {
       goto errout;
@@ -384,7 +402,7 @@ static int wdog_close(FAR struct file *filep)
       upper->crefs--;
     }
 
-  nxsem_post(&upper->exclsem);
+  nxmutex_unlock(&upper->lock);
   ret = OK;
 
 errout:
@@ -418,7 +436,48 @@ static ssize_t wdog_read(FAR struct file *filep, FAR char *buffer,
 static ssize_t wdog_write(FAR struct file *filep, FAR const char *buffer,
                           size_t buflen)
 {
-  return 0;
+#ifdef CONFIG_WATCHDOG_MAGIC_V
+  FAR struct inode                *inode = filep->f_inode;
+  FAR struct watchdog_upperhalf_s *upper;
+  FAR struct watchdog_lowerhalf_s *lower;
+  int err = 0;
+  int i;
+
+  upper = inode->i_private;
+  DEBUGASSERT(upper != NULL);
+  lower = upper->lower;
+  DEBUGASSERT(lower != NULL);
+
+  nxmutex_lock(&upper->lock);
+
+  for (i = 0; i < buflen; i++)
+    {
+      if (buffer[i] == 'V')
+        {
+#ifdef CONFIG_WATCHDOG_AUTOMONITOR
+          watchdog_automonitor_stop(upper);
+#else
+          err = lower->ops->stop(lower);
+#endif
+          break;
+        }
+    }
+
+  if (i == buflen)
+    {
+      err = lower->ops->keepalive(lower);
+    }
+
+  nxmutex_unlock(&upper->lock);
+
+  if (err < 0)
+    {
+      return err;
+    }
+
+#endif
+
+  return buflen;
 }
 
 /****************************************************************************
@@ -445,7 +504,7 @@ static int wdog_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 
   /* Get exclusive access to the device structures */
 
-  ret = nxsem_wait(&upper->exclsem);
+  ret = nxmutex_lock(&upper->lock);
   if (ret < 0)
     {
       return ret;
@@ -622,7 +681,7 @@ static int wdog_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
       break;
     }
 
-  nxsem_post(&upper->exclsem);
+  nxmutex_unlock(&upper->lock);
   return ret;
 }
 
@@ -690,7 +749,7 @@ FAR void *watchdog_register(FAR const char *path,
    * by kmm_zalloc()).
    */
 
-  nxsem_init(&upper->exclsem, 0, 1);
+  nxmutex_init(&upper->lock);
   upper->lower = lower;
 
   /* Copy the registration path */
@@ -719,13 +778,16 @@ FAR void *watchdog_register(FAR const char *path,
   watchdog_automonitor_start(upper);
 #endif
 
+  upper->nb.notifier_call = wdog_notifier;
+  panic_notifier_chain_register(&upper->nb);
+
   return (FAR void *)upper;
 
 errout_with_path:
   kmm_free(upper->path);
 
 errout_with_upper:
-  nxsem_destroy(&upper->exclsem);
+  nxmutex_destroy(&upper->lock);
   kmm_free(upper);
 
 errout:
@@ -773,10 +835,11 @@ void watchdog_unregister(FAR void *handle)
   /* Unregister the watchdog timer device */
 
   unregister_driver(upper->path);
+  panic_notifier_chain_unregister(&upper->nb);
 
   /* Then free all of the driver resources */
 
   kmm_free(upper->path);
-  nxsem_destroy(&upper->exclsem);
+  nxmutex_destroy(&upper->lock);
   kmm_free(upper);
 }

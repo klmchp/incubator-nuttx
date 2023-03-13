@@ -149,6 +149,7 @@ config ARCH_CHIP_STM32H747XI
 	select STM32H7_IO_CONFIG_X
 	select STM32H7_HAVE_FDCAN1
 	select STM32H7_HAVE_FDCAN2
+	select STM32H7_HAVE_SMPS
 	---help---
 		Dual core STM32 H7 Cortex M7+M4, 2048 Kb FLASH, 1024K Kb SRAM
 		TFBGA240
@@ -215,7 +216,28 @@ config ARCH_CHIP_STM32H753ZI
 		STM32 H7 Cortex M7, 2048 Kb FLASH, 1024K Kb SRAM,
 		with cryptographic accelerator, LQFP144
 
+config ARCH_CHIP_STM32H7B3LI
+	bool "STM32H7B3LI"
+	select STM32H7_STM32H7B3XX
+	select STM32H7_FLASH_CONFIG_I
+	select STM32H7_IO_CONFIG_L
+	select STM32H7_HAVE_FDCAN1
+	select STM32H7_HAVE_FDCAN2
+	select STM32H7_HAVE_SMPS
+	---help---
+		STM32 H7 Cortex M7, 2048 Kb FLASH, 1376 Kb SRAM,
+		with cryptographic accelerator, TFBGA225
+
 endchoice # STM32 H7 Chip Selection
+
+config STM32H7_HAVE_SMPS
+	bool
+	default n
+
+config STM32H7_PWR_DIRECT_SMPS_SUPPLY
+	bool "Use direct SMPS supply mode"
+	depends on STM32H7_HAVE_SMPS
+	default n
 
 config STM32H7_IO_CONFIG_A
 	bool
@@ -226,6 +248,10 @@ config STM32H7_IO_CONFIG_B
 	default n
 
 config STM32H7_IO_CONFIG_I
+	bool
+	default n
+
+config STM32H7_IO_CONFIG_L
 	bool
 	default n
 
@@ -242,6 +268,23 @@ config STM32H7_IO_CONFIG_Z
 	default n
 
 config STM32H7_STM32H7X3XX
+	bool
+	default n
+	select ARCH_HAVE_FPU
+	select ARCH_HAVE_DPFPU
+	select ARMV7M_HAVE_ICACHE
+	select ARMV7M_HAVE_DCACHE
+	select ARMV7M_HAVE_ITCM
+	select ARMV7M_HAVE_DTCM
+	select STM32H7_HAVE_ETHERNET
+	select STM32H7_HAVE_FMC
+	select STM32H7_HAVE_GPIOF if !STM32H7_IO_CONFIG_V
+	select STM32H7_HAVE_GPIOG if !STM32H7_IO_CONFIG_V
+	select STM32H7_HAVE_SPI4
+	select STM32H7_HAVE_SPI5 if !STM32H7_IO_CONFIG_V
+	select STM32H7_HAVE_SPI6
+
+config STM32H7_STM32H7B3XX
 	bool
 	default n
 	select ARCH_HAVE_FPU
@@ -389,7 +432,7 @@ config STM32_APP_FORMAT_MCUBOOT
 	select STM32_HAVE_OTA_PARTITION
 	depends on EXPERIMENTAL
 	---help---
-		The MCUboot support of loading the firmware images.		
+		The MCUboot support of loading the firmware images.
 
 comment "MCUboot support depends on CONFIG_EXPERIMENTAL"
 	depends on !EXPERIMENTAL
@@ -404,6 +447,10 @@ menu "STM32H7 Peripheral Selection"
 # for the selected MCU
 
 config STM32H7_HAVE_ETHERNET
+	bool
+	default n
+
+config STM32H7_HAVE_PHY_POLLED
 	bool
 	default n
 
@@ -448,6 +495,7 @@ config STM32H7_ADC
 
 config STM32H7_FDCAN
 	bool
+	select NET_CAN_HAVE_ERRORS
 	select NET_CAN_HAVE_CANFD
 	select NET_CAN_EXTID
 	select NET_CAN_HAVE_TX_DEADLINE
@@ -572,6 +620,7 @@ config STM32H7_ETHMAC
 	depends on STM32H7_HAVE_ETHERNET
 	select NETDEVICES
 	select ARCH_HAVE_PHY
+	select STM32H7_HAVE_PHY_POLLED
 
 config STM32H7_FMC
 	bool "FMC"
@@ -1496,9 +1545,10 @@ config STM32H7_SERIALBRK_BSDCOMPAT
 	---help---
 		Enable using GPIO on the TX pin to send a BSD compatible break:
 		TIOCSBRK will start the break and TIOCCBRK will end the break.
-		The current STM32 U[S]ARTS have no way to leave the break (TX=LOW)
-		on because the SW starts the break and then the HW automatically clears
-		the break. This makes it is difficult to sent a long break.
+		The current STM32H7 U[S]ARTS have no way to leave the break on
+		(TX=LOW) because software starts the break and then the hardware
+		automatically clears the break. This makes it difficult to send
+		a long break.
 
 config STM32H7_USART_SINGLEWIRE
 	bool "Single Wire Support"
@@ -5044,6 +5094,16 @@ config STM32H7_PHYINIT
 		STM32H7_PHYINIT is defined in the configuration then the board specific logic must
 		provide stm32_phyinitialize();  The STM32 Ethernet driver will call this function
 		one time before it first uses the PHY.
+
+config STM32H7_PHY_POLLING
+	bool "Support network monitoring by polling the PHY"
+	default n
+	depends on STM32H7_HAVE_PHY_POLLED
+	select ARCH_PHY_POLLED
+	---help---
+		Some boards may not have an interrupt connected to the PHY.
+		This option allows the network monitor to be used by polling the
+		the PHY for status.
 
 config STM32H7_MII
 	bool "Use MII interface"
